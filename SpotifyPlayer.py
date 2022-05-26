@@ -2,11 +2,12 @@ from logging import root
 from re import I
 import spotipy as spot
 import tkinter as tk
-from tkinter import ttk
+from tkinter import END, ttk
 import pandas as pd
 import time
 import random
 import unidecode
+import difflib
 
 
 from tkinter.messagebox import showinfo
@@ -32,7 +33,7 @@ def SelectPlaylistAndPlaylistID(): #obtains playlists names available for curren
         playlist_id.append(playlists['items'][i]['id'])
     return([playlist_names,playlist_id])    
 
-selectedPlaylistNamesAndId=SelectPlaylistAndPlaylistID() ## global variable 
+#selectedPlaylistNamesAndId=SelectPlaylistAndPlaylistID() ## global variable 
 
 
 #### this function obtains playlist of SELECTED USER, based on the user id
@@ -62,8 +63,8 @@ def selectPlaylistUri(x,y):
             break
     return x[1][i]
 
-selectPlaylistUri(selectedPlaylistNamesAndId,'Billboard 2001' )
-selectPlaylistUri(selectedPlaylistNamesAndId) ## returns the uri of playlist selected by user
+#selectPlaylistUri(selectedPlaylistNamesAndId,'Billboard 2001' )
+#selectPlaylistUri(selectedPlaylistNamesAndId) ## returns the uri of playlist selected by user
 
 
 def playbackSelectedPlaylist(playlistUri):
@@ -92,29 +93,30 @@ def ListOfSongsToPlayback(x):
     return (uniqueUrisCollected)
  
 
-currentPlaylist=ListOfSongsToPlayback(Spotify().playlist('53mEQlZ91fLxuSOo048KFc'))
+
 
 #currentPlaylist=ListOfSongsToPlayback() #freshly obtained list of all tracks from the selected list
 #len(currentPlaylist)
-def selectRandomSong(x):
+def selectRandomSong():
     """
     :param x: (List) with all songs currently stored in the global variable
     """
-    selectedSong=[]
-    selectedSong.append(random.choice(x))
-    x.remove(selectedSong[0])
-    print(len(currentPlaylist))
-    return selectedSong[0]
+    global currentPlaylist
+    global currentSong
+    currentSong.append(random.choice(currentPlaylist))
+    currentPlaylist.remove(currentSong[0])
+    #print(len(currentPlaylist))
+    return currentSong
 
 
      # line to select random element from the list
 len(currentPlaylist)
-currentSong=selectRandomSong(currentPlaylist)
+#currentSong=selectRandomSong(currentPlaylist)
 
 
  #removing song once selected
 
-def getCurrentSongDetails(x):
+def getCurrentSongDetails():
     """
     :param x: (string) uri of currently selected song
     """
@@ -126,8 +128,6 @@ def getCurrentSongDetails(x):
     for i in range (0, len(song["item"]["artists"])):
         details[1].append(song["item"]["artists"][i]["name"])
     #details[2] - release date
-
-
     details[2].append(song["item"]["album"]["release_date"][0:4])
     #details[3] - album title
     details[3].append(song["item"]["album"]['name'])
@@ -140,8 +140,8 @@ def getCurrentSongDetails(x):
             
     return details
 
-currentSongDetails=getCurrentSongDetails(currentSong)
-x=currentSongDetails[1]
+
+
 x
 y="Vanessą Ćarlton"
 def guessTheArtist(x,y):
@@ -155,7 +155,9 @@ def guessTheArtist(x,y):
     else:
         print("Incorrect!")  
         
+### comparing string using difflib sequence matcher ratio method
 
+difflib.SequenceMatcher(None,"Radek","Radek").ratio()
 
 #Spotify().start_playback(device_id="0c3c7767a7157e925aed5d8d907f2e693020161a",uris=["spotify:track:02RqhFaAYzWScfVzKfTZ7L"])
 
@@ -164,9 +166,16 @@ def guessTheArtist(x,y):
 
 #context_uri="spotify:playlist:70xamtzn4Kn7tPPBaTjGX6"
 #def SongsForSelectedPlaylists():
+
+
+## my devices id
+## desktop 
+## phone
+## google home
+## tablet
 Spotify().current_playback()
 def playSelectedSong():
-    Spotify().start_playback(device_id=Spotify().current_playback()["device"]["id"],uris=[currentSong[0]])
+    Spotify().start_playback(device_id=Spotify().current_playback()["device"]["id"],uris=currentSong)
 
 def playSongFromStart():
     Spotify().start_playback(device_id=Spotify().current_playback()["device"]["id"],uris=[Spotify().current_playback()["item"]["uri"]])
@@ -177,8 +186,21 @@ def resumeSong():
 def pauseSong():
     Spotify().pause_playback(device_id=Spotify().current_playback()["device"]["id"])
 
+def forget(widget):
+    widget.forget()
 
-Spotify().user_playlists("21dpuynr2j4jckz3seeogxzwq")
+def retrieve(widget):
+    widget.pack()
+
+
+def loadingMusic():
+    return ListOfSongsToPlayback(Spotify().playlist(selectPlaylistUri(SelectPlaylistAndPlaylistID(),variable.get())))
+
+def assignPlaylistToVariable():
+    global currentPlaylist
+    currentPlaylist=loadingMusic()
+    return currentPlaylist
+    
 ################################# tkinter core ######################
 
 window = tk.Tk()
@@ -187,53 +209,84 @@ window.geometry('600x600+100+100') #width x heigt + translation where the app is
 #window.attributes('-fullscreen', True) alternatively running in full screen mode, but there's no 'x' to quickly kill it so altf4 neeeded
 
 #play, pause and resume buttons
-button_Play = tk.Button(text="Play From Start",command=playSongFromStart)
-button_Pause = tk.Button(text="Pause Song",command=pauseSong)
-button_Resume = tk.Button(text="Resume Song",command=resumeSong)
-#button_Play.pack()
-#button_Pause.pack()
-#button_Resume.pack()
+button_Play = tk.Button(text="Play Song",command= lambda:[playSelectedSong(),
+                                                            retrieve(button_Pause),
+                                                            retrieve(button_Restart),
+                                                            forget(button_Play),
+                                                            retrieve(enterArtist),
+                                                            retrieve(enterTitle),
+                                                            retrieve(button_Submit_artist),
+                                                            retrieve(button_Submit_title),
+                                                            getCurrentSongDetails()])
+button_Restart = tk.Button(text="Restart Song",command= lambda :[playSongFromStart(),
+                                                                forget(button_Restart)])
+button_Pause = tk.Button(text="Pause Song",command=lambda:[pauseSong(),
+                                                            retrieve(button_Resume),
+                                                            forget(button_Pause)])
+button_Resume = tk.Button(text="Resume Song",command= lambda :[resumeSong(),
+                                                                retrieve(button_Pause),
+                                                                forget(button_Resume)])
+button_Welcome = tk.Button(window,text="Start Quiz!",command=lambda : [forget(button_Welcome),
+                                                                        forget(Label_Welcome),
+                                                                        retrieve(Label_Select_Playlist),
+                                                                        retrieve(Playlist_Dropdown_List),
+                                                                        retrieve(button_Submit_Playlist)
+                                                                        
+                                                                        
+                                                                        ])
+button_Submit_Playlist=tk.Button(window,text='Submit',command=lambda:[forget(Playlist_Dropdown_List),
+                                                                        forget(button_Submit_Playlist),
+                                                                        forget(Label_Select_Playlist),
+                                                                        retrieve(button_Play),
+                                                                        loadingMusic(),
+                                                                        assignPlaylistToVariable(),
+                                                                        selectRandomSong()
+
+                                                                        
+
+                                                                        ])
+button_Submit_artist=tk.Button(window,text='Submit Artist',command=lambda:[getArtist(),clearEntryWidget(enterArtist)])
+button_Submit_title=tk.Button(window,text='Submit Title',command=lambda:[getTitle(),clearEntryWidget(enterTitle)])
+
+#button_Submit_Answers=tk.Button(window,text="Submit",command=lambda:[])
+Label_Welcome=tk.Label(window,text=" Welcome to Spotify Music Quiz")
+Label_Select_Playlist=tk.Label(window,text="Select playlist")
+#Label_With_Selected_List=tk.Label(textvariable=variable)
+
+currentPlaylist=[]
+currentSong=[]
 
 
-class Test():
-   def __init__(self):
-       self.root = tk.Tk()
-       self.title('Spotify Player')
-       self.geometry('600x600+100+100')
-       self.label=tk.Label(self.root,
-                           text = "Label")
-       self.buttonForget = tk.Button(self.root,
-                          text = 'Click to hide Label',
-                          command=lambda: self.label.pack_forget())
-       self.buttonRecover = tk.Button(self.root,
-                          text = 'Click to show Label',
-                          command=lambda: self.label.pack())       
-       
-       self.buttonForget.pack()
-       self.buttonRecover.pack()
-       self.label.pack(side="bottom")
-       self.root.mainloop()
 
-   def quit(self):
-       self.root.destroy()
-        
-
-app=Test()
-button_Welcome = tk.Button(window,text="Welome to Spotify Music Quiz!")
+Label_Welcome.pack()
 button_Welcome.pack()
+artist=tk.StringVar(window)
+title=tk.StringVar(window)
+enterArtist=tk.Entry(window,textvariable=artist)
+enterTitle=tk.Entry(window,textvariable=title)
+
+
+Label_Artist=tk.Label(window,text=artist)
+Label_Title=tk.Label(window,text=title)
+
+def getArtist():
+    temp_artist=artist.get()
+    temp_playlist=variable.get()
+    labeltoprint=tk.Label(window,text=temp_playlist).pack()
+    
+def clearEntryWidget(nameOfEntryWidget):
+    nameOfEntryWidget.delete(0,END)
+
+def getTitle():
+    return(title.get())
 
 #entry list to select the initial playlist to play
 #SelectPlaylistAndPlaylistID()[0][0]
 variable=tk.StringVar()
 variable.set(SelectPlaylistAndPlaylistID()[0][0])
-drop=ttk.Combobox(window,textvariable=variable,values=SelectPlaylistAndPlaylistID()[0])
-#drop.pack()
-
-
-
-
-label=tk.Label(textvariable=variable)
-#label.pack()
+Playlist_Dropdown_List=ttk.Combobox(window,textvariable=variable,values=SelectPlaylistAndPlaylistID()[0])
+Playlist_Dropdown_List['state']='readonly'
+#Playlist_Dropdown_List.bind('<<ComboboxSelected>>',forget(Playlist_Dropdown_List))
 
 window.mainloop()
 
@@ -244,3 +297,9 @@ window.mainloop()
 #        message=f'You selected {variable.get()}!'
 #    )
 #drop.bind('<<ComboboxSelected>>',ListChanged)
+
+x=5
+def function():
+    global x
+    x=x+3
+    return x
