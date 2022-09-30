@@ -1,6 +1,8 @@
+import base64
 from random import random
 from select import select
 from turtle import width
+import requests
 from spotipy.oauth2 import SpotifyOAuth
 import spotipy
 import os
@@ -9,28 +11,36 @@ import random
 import unidecode
 import difflib
 import tkinter as tk
-from tkinter import ttk
+from tkinter import END, ttk 
 from tkinter.messagebox import showinfo
+from PIL import Image
+import requests
 
 class NewGame():
 
-    def __init__(self):
-        
+    def __init__(self, keys):
+        self.df = pd.read_csv(keys)
+        self.device_id = self.df['deviceid'].values[0]
+        self.client_id = self.df['clientid'].values[0]
+        self.client_secret = self.df['clientsecret'].values[0]
+        self.redirect_uri = self.df['redirecturi'].values[0]
         self.open_spotify_app()
-        self.spotify = NewGame.spotify()
+        self.spotify = NewGame.spotify(self)
         self.list_of_songs = []
         self.selected_song = []
         self.song_details = []
         self.playlists_names_and_id =[]
         self.playlists_only = []
         self.selected_playlist = ""
+        self.comparison_response = tk.StringVar()
+        self.comparison_response.set("Temp")
         self.user_playlists_names_and_id()
         self.entry_playlist_variable = tk.StringVar()
         self.entry_playlist_variable.set(self.playlist_names_only[0])
         
         self.initial_message_label = ttk.Label(root, text= "Welcome in Spotify Trivia! \nPlease select playlist from dropdown box and press submit button.")
         self.entry_dropdown_playlist = ttk.Combobox(root, textvariable = self.entry_playlist_variable, values = self.playlist_names_only, state ='readonly')
-        self.submit_entry_playlist_button = ttk.Button(root, text= "Submit chosen playlist", command= lambda:[self.widget_forget(self.entry_dropdown_playlist),
+        self.submit_entry_playlist_button = ttk.Button(root, text= "Submit chosen playlist", command = lambda:[self.widget_forget(self.entry_dropdown_playlist),
                                                                                                               self.widget_forget(self.submit_entry_playlist_button),
                                                                                                               self.widget_forget(self.initial_message_label),
                                                                                                               self.user_selected_playlist(self.entry_playlist_variable.get()),
@@ -39,16 +49,44 @@ class NewGame():
                                                                                                               self.widget_pack(self.start_the_game_button)
                                                                                                               ])
         self.start_the_game_button = ttk.Button(root, text = "Lets start the game!", command = lambda:[self.select_random_song(),
-                                                                                                       self.playSongFromStart(),
                                                                                                        self.current_song_details(),
+                                                                                                       self.play_song_from_start(),
                                                                                                        self.widget_forget(self.start_the_game_button),
-                                                                                                       self.widget_forget(self.supportive_label)
+                                                                                                       self.widget_forget(self.supportive_label),
+                                                                                                       self.widget_pack(self.pause_button),
+                                                                                                       self.widget_pack(self.restart_button),
+                                                                                                       self.widget_pack(self.answer_text_entry),
+                                                                                                       self.widget_pack(self.submit_answer_button)
                                                                                                        ])
+        self.resume_button = ttk.Button(root, text= "Resume Song", command = lambda:[self.resume_song(),
+                                                                                     self.widget_forget(self.resume_button),
+                                                                                     self.widget_pack(self.pause_button),
+                                                                                     self.widget_pack(self.restart_button)
+                                                                                     ])
+        self.pause_button = ttk.Button(root, text= "Pause song", command =lambda:[self.pause_song(),
+                                                                                  self.widget_forget(self.pause_button),
+                                                                                  self.widget_forget(self.restart_button),
+                                                                                  self.widget_pack(self.resume_button)
+                                                                                  
+                                                                                  ])
+        self.restart_button = ttk.Button(root, text= "Restart song", command = lambda:[self.play_song_from_start()
+                                                                                       ])
+        self.answer_text_entry = ttk.Entry(root)
+        self.submit_answer_button = ttk.Button(root, text = "Submit your answer", command= lambda:[self.compare_artist(self.answer_text_entry.get()),
+                                                                                                   self.comparison_result_label_build(),
+                                                                                                   self.widget_forget(self.submit_answer_button)])
+
+        self.retry_button = ttk.Button(root, text=" Retry", command= lambda:[self.answer_text_entry.delete(0,END),
+                                                                             self.comparison_result_label.destroy(),
+                                                                             self.widget_forget(self.retry_button),
+                                                                             self.widget_pack(self.submit_answer_button)
+                                                                             
+        ])
+
         self.initial_message_label.pack()
         self.entry_dropdown_playlist.pack()
         self.submit_entry_playlist_button.pack()
         
-
     def open_spotify_app(self):
         """
         command to open Spotify application, please adjust the path in order to run it on your version
@@ -56,7 +94,7 @@ class NewGame():
         """
         os.startfile("C:\\Users\Radek\Desktop\Spotify.lnk") #to make in more generic, either enter the path as paramater in the function or at least leave area where user can define it
 
-    def spotify():
+    def spotify(self):
         """
         gathers credentials required to connect with spotify account - client id, client secret token and uri
         please note that you have to have a premium account active to be able to use Spotify API
@@ -64,8 +102,8 @@ class NewGame():
         defining this function allows to access Spotify methods from spotipy module
         """
         scope = 'user-read-private user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-collaborative'
-        df = pd.read_csv('key.csv')
-        credentials = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=df['clientid'].values[0],client_secret=df['clientsecret'].values[0],redirect_uri=df['uri'].values[0],scope=scope))
+        
+        credentials = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=self.client_id,client_secret=self.client_secret,redirect_uri=self.redirect_uri,scope=scope))
         return(credentials)
 
     def user_playlists_names_and_id(self):
@@ -117,32 +155,35 @@ class NewGame():
         self.song_details = []
 
         song_artists = []
-        for i in range (0, len(self.spotify.current_playback()["item"]["artists"])):
-            song_artists.append(self.spotify.current_playback()["item"]["artists"][i]["name"])
+        for i in range (0, len(self.spotify.track(self.selected_song[0])['artists'])):
+            song_artists.append(self.spotify.track(self.selected_song[0])['artists'][i]['name'])
 
-        song_year = self.spotify.current_playback()["item"]["album"]["release_date"][0:4]
+        song_year = self.spotify.track(self.selected_song[0])['album']['release_date']
         
-        song_album_title = self.spotify.current_playback()["item"]["album"]['name']
+        song_album_title = self.spotify.track(self.selected_song[0])['album']['name']
 
-        song_title = self.spotify.current_playback()["item"]["name"]
+        song_title = self.spotify.track(self.selected_song[0])['name']
+
+        song_photo = self.spotify.track(self.selected_song[0])['album']['images'][0]['url']
         
-        self.song_details = [song_title, song_artists, song_year, song_album_title]
-
-    def playSongFromStart(self):
-        self.spotify.start_playback(device_id = self.spotify.current_playback()["device"]["id"], uris = self.selected_song)
+        self.song_details = [song_title, song_artists, song_year, song_album_title, song_photo]
         
-    def resumeSong(self):
-        self.spotify.start_playback(device_id = self.spotify.current_playback()["device"]["id"], uris = self.selected_song, position_ms = self.spotify.current_playback()["progress_ms"])
+    def play_song_from_start(self):
+        self.spotify.start_playback(device_id = self.device_id, uris = self.selected_song)
+        
+    def resume_song(self):
+        self.spotify.start_playback(device_id = self.device_id, uris = self.selected_song, position_ms = self.spotify.current_playback()["progress_ms"])
 
-    def pauseSong(self):
-        self.spotify.pause_playback(device_id = self.spotify.current_playback()["device"]["id"])
+    def pause_song(self):
+        self.spotify.pause_playback(device_id = self.device_id)
 
-    def compareArtist(self, artist_answer):
+    def compare_artist(self, artist_answer):
         """
         :param artist_answer: (string) answer provided by player in order to guess the artist
         function compares the correct artist/artists covering the currently selected song with the answer provided by user
         based on the accuracy of answer, it returns different kind of output
         """
+        
         correct_answers = []
         for i in range (0, len(self.song_details[1])):
             correct_answers.append((unidecode.unidecode(self.song_details[1][i])).lower())
@@ -156,7 +197,8 @@ class NewGame():
         print(sequence_matcher_ratio)
 
         if max(sequence_matcher_ratio) == 1:
-            print( "Excellent!" )
+            self.comparison_response.set("Excellent!")
+            self.details_display_label(root)
 
         elif max(sequence_matcher_ratio) < 1 and max(sequence_matcher_ratio) >= 0.70 and len(correct_answers[sequence_matcher_ratio.index(max(sequence_matcher_ratio))]) == len(artist_answer): 
             counter = 0
@@ -167,17 +209,21 @@ class NewGame():
                     counter = counter + 1
 
             if counter == 1:
-                print( "There is exactly one typo, try again!" )
+                self.comparison_response.set("There is exactly one typo, try again!")
+                self.retry_button.pack() 
             elif counter == 2:
-                print( "There are exactly two typos, try again." )
+                self.comparison_response.set("There are exactly two typos, try again.")
+                self.retry_button.pack() 
             else:
-                print( "There are three or even more typos, but number of characters is still correct.")
+                self.comparison_response.set("There are three or even more typos, but number of characters is still correct.")
+                self.retry_button.pack()
 
         elif max(sequence_matcher_ratio) < 1 and max(sequence_matcher_ratio) >= 0.80 and abs(len(correct_answers[sequence_matcher_ratio.index(max(sequence_matcher_ratio))]) != len(artist_answer)):
-            print("Its quite close, but number of characters in correct answer is different.")
-
+            self.comparison_response.set("Its quite close, but number of characters in correct answer is different.") 
+            self.retry_button.pack()
         else:
-            print( "Incorrect!" )
+           self.comparison_response.set("Incorrect!")
+           self.retry_button.pack() 
 
     def widget_pack(self, widget):
         widget.pack()
@@ -189,15 +235,19 @@ class NewGame():
         self.supportive_label = ttk.Label(root, text = self.selected_playlist)
         self.widget_pack(self.supportive_label)
 
-
-'''
-window = ttk.Tk()
-window.title('Spotify Player')
-window.geometry('1366x768')
-
-window.mainloop()'''
-
-
+    def comparison_result_label_build(self):
+        self.comparison_result_label = ttk.Label(root, text = self.comparison_response.get())
+        self.comparison_result_label.pack()
+    
+    def details_display_label(self,root):
+        self.song_artists_label = ttk.Label(root, text = "Artist(s): {}".format(self.song_details[1]))
+        self.song_title = ttk.Label(root, text = "Song Title: {}".format(self.song_details[0]))
+        self.song_album = ttk.Label(root, text = "Album: {}".format(self.song_details[3]))
+        self.song_year = ttk.Label(root, text = "Released: {}".format(self.song_details[2]))
+        self.song_artists_label.pack()
+        self.song_title.pack()
+        self.song_album.pack()
+        self.song_year.pack()
 
 
 
@@ -209,40 +259,29 @@ root.geometry(f"{int(0.8*screen_width)}x{int(0.8*screen_height)}+{int(0.1*screen
 root.resizable(False,False)
 root.configure(bg="#828282")
 
-new_game = NewGame()
+new_game = NewGame('keys.csv')
 
 #new_game.create_entry_dropdown_button(root)
 
 root.mainloop()
 
+r="Atrits(t)"
 
+im = Image.open(requests.get('https://i.scdn.co/image/ab67616d00001e02ab580fab750cc9baf0d52b5c', stream=True).raw)
+im
 
+im = Image.open(requests.get('https://i.scdn.co/image/ab67616d00001e02ab580fab750cc9baf0d52b5c', stream=True).raw, formats=["PNG"])
+im.format
+label = ttk.Label(root, image=im)
+label.pack()
 
-root = tk.Tk()
+Spotify().track('spotify:track:2AMysGXOe0zzZJMtH3Nizb')['album']['images'][0]['url']
 
-root.title("Spotify Music Trivia")
-screen_width = root.winfo_screenwidth() #1536 on laptop
-screen_height = root.winfo_screenheight() #864 on laptop
-root.geometry(f"{int(0.8*screen_width)}x{int(0.8*screen_height)}+{int(0.1*screen_width)}+{int(0.1*screen_height)}")
-root.resizable(False,False)
-root.configure(bg="#828282")
-
-#Welcome Label
-
-#frame_welcome.configure()
-
-#label_welcome = ttk.Label(root, text=" Welcome to Spotify Music Quiz")
-#label_welcome.pack()
-
-new_game = NewGame()
-entry_playlist_variable = tk.StringVar()
-entry_playlist_variable.set(new_game.playlist_names_only[0])
-playlist_dropdown_list = ttk.Combobox(root, textvariable = entry_playlist_variable, values=new_game.playlist_names_only)
-playlist_dropdown_list['state']='readonly'
-playlist_dropdown_list.pack()
-
-root.mainloop()
-
+def Spotify(): # gathers credentials required to connect with spotify account - client id, client secret token and uri
+    df=pd.read_csv('keys.csv')
+    scope = 'user-read-private user-read-playback-state user-modify-playback-state'
+    credentials=spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=df['clientid'].values[0],client_secret=df['clientsecret'].values[0],redirect_uri=df['redirecturi'].values[0],scope=scope))
+    return(credentials)
 
 """
 Spotify green color:
