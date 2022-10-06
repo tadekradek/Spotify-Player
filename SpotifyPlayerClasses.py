@@ -15,6 +15,7 @@ from tkinter import END, ttk
 from tkinter.messagebox import showinfo
 from PIL import Image
 import requests
+import time
 
 class NewGame():
 
@@ -38,51 +39,75 @@ class NewGame():
         self.entry_playlist_variable = tk.StringVar()
         self.entry_playlist_variable.set(self.playlist_names_only[0])
         
+        self.correctly_recognized = 0
+        self.skipped = 0
+        self.incorrect = 0
+
         self.initial_message_label = ttk.Label(root, text= "Welcome in Spotify Trivia! \nPlease select playlist from dropdown box and press submit button.")
         self.entry_dropdown_playlist = ttk.Combobox(root, textvariable = self.entry_playlist_variable, values = self.playlist_names_only, state ='readonly')
-        self.submit_entry_playlist_button = ttk.Button(root, text= "Submit chosen playlist", command = lambda:[self.widget_forget(self.entry_dropdown_playlist),
-                                                                                                              self.widget_forget(self.submit_entry_playlist_button),
-                                                                                                              self.widget_forget(self.initial_message_label),
+        self.submit_entry_playlist_button = ttk.Button(root, text= "Submit chosen playlist", command = lambda:[self.entry_dropdown_playlist.forget(),
+                                                                                                              self.submit_entry_playlist_button.forget(),
+                                                                                                              self.initial_message_label.forget(),
                                                                                                               self.user_selected_playlist(self.entry_playlist_variable.get()),
                                                                                                               self.list_of_songs_from_selected_playlist(self.selected_playlist), #till this moment it works
-                                                                                                              self.supportive_label(root),
-                                                                                                              self.widget_pack(self.start_the_game_button)
+                                                                                                              
+                                                                                                              self.start_the_game_button.pack()
                                                                                                               ])
         self.start_the_game_button = ttk.Button(root, text = "Lets start the game!", command = lambda:[self.select_random_song(),
                                                                                                        self.current_song_details(),
                                                                                                        self.play_song_from_start(),
-                                                                                                       self.widget_forget(self.start_the_game_button),
-                                                                                                       self.widget_forget(self.supportive_label),
-                                                                                                       self.widget_pack(self.pause_button),
-                                                                                                       self.widget_pack(self.restart_button),
-                                                                                                       self.widget_pack(self.answer_text_entry),
-                                                                                                       self.widget_pack(self.submit_answer_button)
+                                                                                                       self.start_the_game_button.forget(),
+                                                                                                       self.reset_game_stats(),
+                                                                                                       self.pause_button.pack(),
+                                                                                                       self.restart_button.pack(),
+                                                                                                       self.answer_text_entry.pack(),
+                                                                                                       self.submit_answer_button.pack(),
+                                                                                                       self.skip_button.pack()
                                                                                                        ])
         self.resume_button = ttk.Button(root, text= "Resume Song", command = lambda:[self.resume_song(),
-                                                                                     self.widget_forget(self.resume_button),
-                                                                                     self.widget_pack(self.pause_button),
-                                                                                     self.widget_pack(self.restart_button)
+                                                                                     self.resume_button.forget(),
+                                                                                     self.pause_button.forget(),
+                                                                                     self.restart_button.pack(),
+                                                                                     self.skip_button.pack(),
+                                                                                     self.pause_button.pack()
                                                                                      ])
         self.pause_button = ttk.Button(root, text= "Pause song", command =lambda:[self.pause_song(),
-                                                                                  self.widget_forget(self.pause_button),
-                                                                                  self.widget_forget(self.restart_button),
-                                                                                  self.widget_pack(self.resume_button)
+                                                                                  self.pause_button.forget(),
+                                                                                  self.restart_button.forget(),
+                                                                                  self.resume_button.pack(),
+                                                                                  self.skip_button.forget()
                                                                                   
                                                                                   ])
-        self.restart_button = ttk.Button(root, text= "Restart song", command = lambda:[self.play_song_from_start()
+        self.restart_button = ttk.Button(root, text= "Restart song", command = lambda:[self.play_song_from_start(),
+                                                                                       self.pause_button.pack()
                                                                                        ])
         self.answer_text_entry = ttk.Entry(root)
         self.submit_answer_button = ttk.Button(root, text = "Submit your answer", command= lambda:[self.compare_artist(self.answer_text_entry.get()),
                                                                                                    self.comparison_result_label_build(),
-                                                                                                   self.widget_forget(self.submit_answer_button)])
+                                                                                                   self.submit_answer_button.forget()
+                                                                                                   ])
 
         self.retry_button = ttk.Button(root, text=" Retry", command= lambda:[self.answer_text_entry.delete(0,END),
                                                                              self.comparison_result_label.destroy(),
-                                                                             self.widget_forget(self.retry_button),
-                                                                             self.widget_pack(self.submit_answer_button)
+                                                                             self.retry_button.forget(),
+                                                                             self.submit_answer_button.pack()
+                                                                             
                                                                              
         ])
 
+        self.play_next_song_button = ttk.Button(root, text="Play Next Song", command=lambda:[self.details_display_hide(),
+                                                                                             self.select_random_song(),
+                                                                                             self.current_song_details(),
+                                                                                             self.play_song_from_start(),
+                                                                                             self.play_next_song_button.forget(),
+                                                                                             self.comparison_result_label.destroy(),
+                                                                                             self.answer_text_entry.delete(0,END),
+                                                                                             self.submit_answer_button.pack(),
+                                                                                             self.skip_button.pack()
+
+        ])
+
+        self.skip_button = ttk.Button(root, text =  "Skip the song", command= lambda:[self.skip_song(root)])
         self.initial_message_label.pack()
         self.entry_dropdown_playlist.pack()
         self.submit_entry_playlist_button.pack()
@@ -123,6 +148,7 @@ class NewGame():
         based on the provided name of playlist (selected by user from dropdown list),
         this function returns the uri code of selected playlist
         """
+
         for x in range(0, len(self.playlist_names_and_id)):
             if self.playlist_names_and_id[x][0] == selected_playlist:
                 self.selected_playlist = self.playlist_names_and_id[x][1]
@@ -134,6 +160,7 @@ class NewGame():
         :param selected_playlist_uri: (string) uri code of playlist selected by the player
         functions outputs a list containing all tracks from the playlist selected based on uri provided as argument
         """
+        
         self.list_of_songs = []
         for x in range (0, len(self.spotify.playlist_items(selected_playlist_uri)["items"])):
             self.list_of_songs.append(self.spotify.playlist_items(selected_playlist_uri)["items"][x]["track"]["uri"])
@@ -198,9 +225,12 @@ class NewGame():
 
         if max(sequence_matcher_ratio) == 1:
             self.comparison_response.set("Excellent!")
+            self.correctly_recognized = self.correctly_recognized + 1
             self.details_display_label(root)
+            self.play_next_song_button.pack()
 
         elif max(sequence_matcher_ratio) < 1 and max(sequence_matcher_ratio) >= 0.70 and len(correct_answers[sequence_matcher_ratio.index(max(sequence_matcher_ratio))]) == len(artist_answer): 
+            self.incorrect = self.incorrect + 1
             counter = 0
             correct_char = [*correct_answers[sequence_matcher_ratio.index(max(sequence_matcher_ratio))]]
             ans_char = [*artist_answer]
@@ -219,9 +249,11 @@ class NewGame():
                 self.retry_button.pack()
 
         elif max(sequence_matcher_ratio) < 1 and max(sequence_matcher_ratio) >= 0.80 and abs(len(correct_answers[sequence_matcher_ratio.index(max(sequence_matcher_ratio))]) != len(artist_answer)):
+            self.incorrect = self.incorrect + 1
             self.comparison_response.set("Its quite close, but number of characters in correct answer is different.") 
             self.retry_button.pack()
         else:
+           self.incorrect = self.incorrect + 1 
            self.comparison_response.set("Incorrect!")
            self.retry_button.pack() 
 
@@ -249,6 +281,22 @@ class NewGame():
         self.song_album.pack()
         self.song_year.pack()
 
+    def details_display_hide(self):
+        self.song_artists_label.forget()
+        self.song_title.forget()
+        self.song_album.forget()
+        self.song_year.forget()
+
+    def reset_game_stats(self):
+        self.correctly_recognized = 0
+        self.skipped = 0
+        self.incorrect = 0
+
+    def skip_song(self, root):
+        self.pause_song()
+        self.details_display_label(root)
+        self.skipped = self.skipped + 1
+        self.play_next_song_button.pack()
 
 
 root = tk.Tk()
@@ -265,15 +313,7 @@ new_game = NewGame('keys.csv')
 
 root.mainloop()
 
-r="Atrits(t)"
 
-im = Image.open(requests.get('https://i.scdn.co/image/ab67616d00001e02ab580fab750cc9baf0d52b5c', stream=True).raw)
-im
-
-im = Image.open(requests.get('https://i.scdn.co/image/ab67616d00001e02ab580fab750cc9baf0d52b5c', stream=True).raw, formats=["PNG"])
-im.format
-label = ttk.Label(root, image=im)
-label.pack()
 
 Spotify().track('spotify:track:2AMysGXOe0zzZJMtH3Nizb')['album']['images'][0]['url']
 
